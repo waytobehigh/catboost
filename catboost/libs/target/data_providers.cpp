@@ -409,14 +409,14 @@ namespace NCB {
                     "Multiclassification-only metrics specified for a single-dimensional model"
                 );
             } else {
-                for (const auto& metricDescription : metricDescriptions) {
-                    auto metricLossFunction = metricDescription.GetLossFunction();
-                    CB_ENSURE(
-                        IsMultiClassCompatibleMetric(metricLossFunction),
-                        "Non-Multiclassification compatible metric (" << metricLossFunction
-                        << ") specified for a multidimensional model"
-                    );
-                }
+//                for (const auto& metricDescription : metricDescriptions) {
+//                    auto metricLossFunction = metricDescription.GetLossFunction();
+//                    CB_ENSURE(
+//                        IsMultiClassCompatibleMetric(metricLossFunction),
+//                        "Non-Multiclassification compatible metric (" << metricLossFunction
+//                        << ") specified for a multidimensional model"
+//                    );
+//                }
                 if (!knownClassCount) { // because there might be missing classes in train
                     knownClassCount = *knownModelApproxDimension;
                 }

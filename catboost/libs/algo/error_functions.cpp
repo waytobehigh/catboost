@@ -1,6 +1,8 @@
 #include "error_functions.h"
 
 #include <util/generic/xrange.h>
+//
+#include <fstream>
 
 template <int MaxDerivativeOrder, bool UseTDers, bool UseExpApprox, bool HasDelta>
 void IDerCalcer::CalcDersRangeImpl(
@@ -496,6 +498,181 @@ void TCrossEntropyError::CalcDersRange(
             Y_ASSERT(false);
     }
 }
+
+
+#define MULTICLASS
+#ifdef MULTICLASS
+
+
+
+template <bool CalcThirdDer, bool UseTDers, bool UseExpApprox, bool HasDelta>
+static void CalcMultiClassDerRangeImpl(
+        int start,
+        int count,
+        const double* approxes,
+        const double* approxDeltas,
+        const float* targets,
+        const float* weights,
+        TDers* ders,
+        double* firstDers
+) {
+    TExpForwardView</*Capacity*/16> expApproxes(MakeArrayRef(approxes + start, count), 0);
+    TExpForwardView</*Capacity*/16> expApproxDeltas(MakeArrayRef(approxDeltas + start, count), 0);
+    Y_ASSERT(HasDelta == (approxDeltas != nullptr));
+#pragma clang loop vectorize_width(4) interleave_count(2)
+    for (int i = start; i < start + count; ++i) {
+        double e;
+        if (UseExpApprox) {
+            e = approxes[i];
+        } else {
+            e = expApproxes[i - start];
+        }
+        if (HasDelta) {
+            if (UseExpApprox) {
+                e *= approxDeltas[i];
+            } else {
+                e *= expApproxDeltas[i - start];
+            }
+        }
+        const double p = 1 - 1 / (1 + e);
+
+        if (UseTDers) {
+            ders[i].Der1 = targets[i] - p;
+            ders[i].Der2 = -p * (1 - p);
+            if (CalcThirdDer) {
+                ders[i].Der3 = -p * (1 - p) * (1 - 2 * p);
+            }
+        } else {
+            firstDers[i] = targets[i] - p;
+        }
+    }
+    if (weights != nullptr) {
+#pragma clang loop vectorize_width(4) interleave_count(2)
+        for (int i = start; i < start + count; ++i) {
+            if (UseTDers) {
+                ders[i].Der1 *= weights[i];
+                ders[i].Der2 *= weights[i];
+                if (CalcThirdDer) {
+                    ders[i].Der3 *= weights[i];
+                }
+            } else {
+                firstDers[i] *= weights[i];
+            }
+        }
+    }
+}
+
+static constexpr int EncodeMultiClassImplParameters(
+        bool calcThirdDer,
+        bool useTDers,
+        bool useExpApprox,
+        bool hasDelta
+) {
+    return calcThirdDer * 8 + useTDers * 4 + useExpApprox * 2 + hasDelta;
+}
+
+void TMultiClassError::CalcDersRange(
+        int start,
+        int count,
+        bool calcThirdDer,
+        const double* approxes,
+        const double* approxDeltas,
+        const float* targets,
+        const float* weights,
+        TDers* ders
+) const {
+    const int encodedParameters = EncodeMultiClassImplParameters(
+            calcThirdDer,
+            /*useTDers*/ true,
+            GetIsExpApprox(),
+            /*hasDelta*/ approxDeltas != nullptr);
+    switch (encodedParameters) {
+        case EncodeMultiClassImplParameters(true, true, true, true):
+            return CalcMultiClassDerRangeImpl<true, true, true, true>(
+                    start,
+                    count,
+                    approxes,
+                    approxDeltas,
+                    targets,
+                    weights,
+                    ders,
+                    nullptr);
+        case EncodeMultiClassImplParameters(true, true, true, false):
+            return CalcMultiClassDerRangeImpl<true, true, true, false>(
+                    start,
+                    count,
+                    approxes,
+                    approxDeltas,
+                    targets,
+                    weights,
+                    ders,
+                    nullptr);
+        case EncodeMultiClassImplParameters(true, true, false, true):
+            return CalcMultiClassDerRangeImpl<true, true, false, true>(
+                    start,
+                    count,
+                    approxes,
+                    approxDeltas,
+                    targets,
+                    weights,
+                    ders,
+                    nullptr);
+        case EncodeMultiClassImplParameters(true, true, false, false):
+            return CalcMultiClassDerRangeImpl<true, true, false, false>(
+                    start,
+                    count,
+                    approxes,
+                    approxDeltas,
+                    targets,
+                    weights,
+                    ders,
+                    nullptr);
+        case EncodeMultiClassImplParameters(false, true, true, true):
+            return CalcMultiClassDerRangeImpl<false, true, true, true>(
+                    start,
+                    count,
+                    approxes,
+                    approxDeltas,
+                    targets,
+                    weights,
+                    ders,
+                    nullptr);
+        case EncodeMultiClassImplParameters(false, true, true, false):
+            return CalcMultiClassDerRangeImpl<false, true, true, false>(
+                    start,
+                    count,
+                    approxes,
+                    approxDeltas,
+                    targets,
+                    weights,
+                    ders,
+                    nullptr);
+        case EncodeMultiClassImplParameters(false, true, false, true):
+            return CalcMultiClassDerRangeImpl<false, true, false, true>(
+                    start,
+                    count,
+                    approxes,
+                    approxDeltas,
+                    targets,
+                    weights,
+                    ders,
+                    nullptr);
+        case EncodeMultiClassImplParameters(false, true, false, false):
+            return CalcMultiClassDerRangeImpl<false, true, false, false>(
+                    start,
+                    count,
+                    approxes,
+                    approxDeltas,
+                    targets,
+                    weights,
+                    ders,
+                    nullptr);
+        default:
+            Y_ASSERT(false);
+    }
+}
+
+#endif
 
 void TQuerySoftMaxError::CalcDersForSingleQuery(
     int start,

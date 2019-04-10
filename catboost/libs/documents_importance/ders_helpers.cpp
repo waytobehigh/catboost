@@ -89,6 +89,13 @@ static TEvaluateDerivativesFunc GetEvaluateDerivativesFunc(ELossFunction lossFun
             return EvaluateDerivativesForError<TMAPError>;
         case ELossFunction::Poisson:
             return EvaluateDerivativesForError<TPoissonError>;
+
+#define MULTICLASS
+#ifdef MULTICLASS
+        case ELossFunction::MultiClass:
+            return EvaluateDerivativesForError<TMultiClassError>;
+#endif
+
         default:
             CB_ENSURE(false, "Error function " + ToString(lossFunction) + " is not supported yet in ostr mode");
     }

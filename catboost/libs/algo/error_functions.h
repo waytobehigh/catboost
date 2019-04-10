@@ -376,7 +376,7 @@ private:
 class TMultiClassError final : public IDerCalcer {
 public:
     explicit TMultiClassError(bool isExpApprox)
-        : IDerCalcer(isExpApprox, /*maxDerivativeOrder*/ 2)
+        : IDerCalcer(isExpApprox, /*maxDerivativeOrder*/ 3)
     {
         CB_ENSURE(isExpApprox == false, "Approx format does not match");
     }
@@ -425,6 +425,20 @@ public:
             }
         }
     }
+
+#define MULTICLASS
+#ifdef MULTICLASS
+    void CalcDersRange(
+            int start,
+            int count,
+            bool calcThirdDer,
+            const double* approxes,
+            const double* approxDeltas,
+            const float* targets,
+            const float* weights,
+            TDers* ders
+    ) const override;
+#endif
 };
 
 class TMultiClassOneVsAllError final : public IDerCalcer {
